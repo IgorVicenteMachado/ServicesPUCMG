@@ -32,7 +32,6 @@ namespace msuser.Controllers
             _cache = cache;
         }
 
-
         [Authorize]
         [HttpGet("GetUser")]
         public async Task<IActionResult> GetUser()

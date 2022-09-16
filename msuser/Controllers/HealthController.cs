@@ -9,6 +9,6 @@ namespace msuser.Controllers
     {
 
         [HttpGet("healthcheck")]
-        public IActionResult healthcheck() => Ok($"SqlConnection: {AppSettingsConfig.SqlConnection} TokenKey: {AppSettingsConfig.TokenKey}");
+        public IActionResult healthcheck() => Ok("ok");
     }
 }
