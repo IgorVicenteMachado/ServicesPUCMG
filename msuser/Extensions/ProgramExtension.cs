@@ -16,7 +16,6 @@ namespace msuser.Extensions
         {
             AppSettingsConfig.TokenKey = builder.Configuration.GetValue<string>("TokenKey");
             AppSettingsConfig.SqlConnection = builder.Configuration.GetConnectionString("SqlConnection");
-            //AppSettingsConfig.Sendgrid_Api_Key = builder.Configuration.GetValue<string>("Sendgrid_Api_Key");
         }
 
         public static void ConfigureDependencyInjection(this WebApplicationBuilder builder)
