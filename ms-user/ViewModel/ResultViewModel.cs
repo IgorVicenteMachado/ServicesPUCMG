@@ -1,26 +1,26 @@
-﻿namespace msuser.ViewModel
+﻿namespace ms_user.ViewModel
 {
-    public class ResultVM<T> 
+    public class ResultViewModel<T> 
     {
-        public ResultVM(T data)
+        public ResultViewModel(T data)
         {
             Data = data;
         }
 
-        public ResultVM(List<string> errors)
+        public ResultViewModel(List<string> errors)
         {
             Errors = errors;
         }    
-        public ResultVM(string error)
+        public ResultViewModel(string error)
         {
             Errors.Add(error);
         }
 
-        public ResultVM(T data, List<string> errors)
+        public ResultViewModel(T data, List<string> errors)
         {
             Data = data;
             Errors = errors;
-        } 
+        }
 
         public T Data { get; private set; }
         public List<string> Errors { get; private set; } = new();

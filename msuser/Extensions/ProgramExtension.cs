@@ -21,7 +21,7 @@ namespace msuser.Extensions
 
         public static void ConfigureDependencyInjection(this WebApplicationBuilder builder)
         {
-            builder.Services.AddDbContext<DataContext>(opt => opt.UseNpgsql(AppSettingsConfig.SqlConnection));
+            builder.Services.AddDbContext<DataContext>(opt => opt.UseSqlServer(AppSettingsConfig.SqlConnection));
             builder.Services.AddScoped<TokenService>();
             builder.Services.AddMemoryCache();
         }
@@ -35,7 +35,6 @@ namespace msuser.Extensions
                 options.Password.RequireLowercase = true;
                 options.Password.RequireUppercase = true;
                 options.Password.RequiredLength = 6;
-                options.Lockout.MaxFailedAccessAttempts = 6;
             })
             .AddRoles<Role>()
             .AddRoleManager<RoleManager<Role>>()

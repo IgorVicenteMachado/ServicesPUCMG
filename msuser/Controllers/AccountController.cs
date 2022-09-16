@@ -39,13 +39,13 @@ namespace msuser.Controllers
             try
             {
                 var email = User.FindFirst(ClaimTypes.Email)?.Value;
-                var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
-                return Ok(new ResultVM<User>(user));
+                var user = _userManager.Users.FirstOrDefault(u => u.Email == email);
+                return Ok(new ResultVM<dynamic>(new { Id = user.Id, Email = user.Email, PrimeiroNome = user.FirstName, UltimoNome = user.LastName, Perfil = user.Profile}, null));
             }
             catch (Exception ex)
             {
                 return StatusCode(StatusCodes.Status500InternalServerError,
-                    new ResultVM<string>($"Erro ao tentar recuperar Usuário. Erro: {ex.Message}"));
+                    new ResultVM<string>( $"Erro ao tentar recuperar Usuário. Erro: {ex.Message}"));
             }
         }
 
@@ -61,17 +61,15 @@ namespace msuser.Controllers
                 if (await _userManager.Users.AsNoTracking().AnyAsync(u => u.Email == userVM.Email))
                     return BadRequest(new ResultVM<string>("Usuário já existe"));
 
-                var role = GetRolesFromCache().First(x => x.NormalizedName == userVM.Profile.ToString().ToUpper());
+                var role = GetRolesFromCache().First(x => x.NormalizedName == userVM.Perfil.ToString().ToUpper());
 
                 var user = CreateUser(userVM, role);
 
                 var result = await _userManager.CreateAsync(user, user.PasswordHash);
 
                 if (result.Succeeded)
-                    return Ok(new ResultVM<dynamic>(new
-                    {
-                        token = _tokenService.CreateToken(user).Result
-                    }));
+                    return Ok(new ResultVM<dynamic>(new { UserId = user.Id, Token = _tokenService.CreateToken(user).Result }));
+
 
                 return BadRequest(new ResultVM<string>(result.GetErrors()));
             }
@@ -95,12 +93,12 @@ namespace msuser.Controllers
                 if (user == null)
                     return StatusCode(401, new ResultVM<string>("Usuário ou senha inválidos"));
 
-                var result = await _signInManager.CheckPasswordSignInAsync(user, userLogin.Password, false);
+                var result = await _signInManager.CheckPasswordSignInAsync(user, userLogin.Senha, false);
 
                 if (!result.Succeeded)
                     return StatusCode(401, new ResultVM<string>("Usuário ou senha inválidos"));
 
-                return Ok(new ResultVM<dynamic>(new { token = _tokenService.CreateToken(user).Result }));
+                return Ok(new ResultVM<dynamic>(new { UserId = user.Id, Token = _tokenService.CreateToken(user).Result }));
             }
             catch (Exception ex)
             {
@@ -111,7 +109,7 @@ namespace msuser.Controllers
 
         [Authorize]
         [HttpPut("UpdateUser")]
-        public async Task<IActionResult> UpdateUser(UserVM userVM)
+        public async Task<IActionResult> UpdateUser( UserVM userVM)
         {
             if (!ModelState.IsValid)
                 return BadRequest(new ResultVM<string>(ModelState.GetErrors()));
@@ -119,26 +117,38 @@ namespace msuser.Controllers
             try
             {
                 var email = User.FindFirst(ClaimTypes.Email)?.Value;
-                var user = await _userManager.Users.Include(x => x.Roles).FirstOrDefaultAsync(u => u.Email == email);
-
+                var user = _context.Users.Include(u => u.Roles).FirstOrDefault(u => u.Email == email);
                 if (user == null)
                     return BadRequest(new ResultVM<string>("Usuário Inválido"));
 
-                if (userVM.PasswordHash != null)
-                {
-                    var token = await _userManager.GeneratePasswordResetTokenAsync(user);
-                    await _userManager.ResetPasswordAsync(user, token, userVM.PasswordHash);
-                }
+                var roles = GetRolesFromCache();
+                var userRole = roles.First(r => r.Name == userVM.Perfil.ToString().ToLower());
 
                 _context.UserRoles.RemoveRange(user.Roles);
-                var role = GetRolesFromCache().First(x => x.NormalizedName == userVM.Profile.ToString().ToUpper());
-                user = UpdateUser(user, userVM, role);
-                await _userManager.UpdateAsync(user);
 
-                return Ok(new
+                user.UserName = userVM.Email;
+                user.Email = userVM.Email;
+                user.PasswordHash = userVM.Senha;
+                user.FirstName = userVM.PrimeiroNome;
+                user.LastName = userVM.UltimoNome;
+                user.Profile = userVM.Perfil;
+                user.NormalizedEmail = userVM.Email.ToUpper();
+                user.NormalizedUserName = userVM.Email.ToUpper();
+                user.Roles = new List<UserRole>() { new UserRole() { RoleId = userRole.Id, UserId = user.Id } };
+
+
+                if (userVM.Senha != null)
                 {
-                    token = _tokenService.CreateToken(user).Result
-                });
+                    var token = await _userManager.GeneratePasswordResetTokenAsync(user);
+                    var reset = await _userManager.ResetPasswordAsync(user, token, userVM.Senha);
+                    if(!reset.Succeeded)
+                        return BadRequest(new ResultVM<string>(reset.GetErrors()));
+                };
+                var result = await _userManager.UpdateAsync(user);
+                if(result.Succeeded)
+                    return Ok(new ResultVM<dynamic>(new { UserId = user.Id, Token = _tokenService.CreateToken(user).Result }));
+
+                return BadRequest(new ResultVM<string>(result.GetErrors()));
             }
             catch (Exception ex)
             {
@@ -169,25 +179,18 @@ namespace msuser.Controllers
             user.Id = Guid.NewGuid();
             user.Roles = new List<UserRole>() { new UserRole() { RoleId = role.Id, UserId = user.Id } };
             user.UserName = userVM.Email;
-            user.PasswordHash = userVM.PasswordHash;
+            user.PasswordHash = userVM.Senha;
             user.Email = userVM.Email;
-            user.FirstName = userVM.FirstName;
-            user.LastName = userVM.LastName;
-            user.Profile = userVM.Profile;
+            user.FirstName = userVM.PrimeiroNome;
+            user.LastName = userVM.UltimoNome;
+            user.Profile = userVM.Perfil;
             return user;
         }
 
         private static User UpdateUser(User user, UserVM userVM, Role role)
         {
-            user.Roles = new List<UserRole>() { new UserRole() { RoleId = role.Id, UserId = user.Id } };
-            user.UserName = userVM.Email;
-            user.Email = userVM.Email;
-            user.FirstName = userVM.FirstName;
-            user.LastName = userVM.LastName;
-            user.Profile = userVM.Profile;
+           
             return user;
         }
     }
 }
-
-
