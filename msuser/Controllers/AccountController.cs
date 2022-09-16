@@ -40,12 +40,13 @@ namespace msuser.Controllers
             {
                 var email = User.FindFirst(ClaimTypes.Email)?.Value;
                 var user = _userManager.Users.FirstOrDefault(u => u.Email == email);
-                return Ok(new ResultVM<dynamic>(new { Id = user.Id, Email = user.Email, PrimeiroNome = user.FirstName, UltimoNome = user.LastName, Perfil = user.Profile}, null));
+
+                return Ok(new ResultVM<dynamic>(
+                    new { Id = user.Id, Email = user.Email, PrimeiroNome = user.FirstName, UltimoNome = user.LastName, Perfil = user.Profile}, null));
             }
             catch (Exception ex)
             {
-                return StatusCode(StatusCodes.Status500InternalServerError,
-                    new ResultVM<string>( $"Erro ao tentar recuperar Usuário. Erro: {ex.Message}"));
+                return StatusCode(500, new ResultVM<string>( $"Erro ao tentar recuperar Usuário. Erro: {ex.Message}"));
             }
         }
 
@@ -61,24 +62,25 @@ namespace msuser.Controllers
                 if (await _userManager.Users.AsNoTracking().AnyAsync(u => u.Email == userVM.Email))
                     return BadRequest(new ResultVM<string>("Usuário já existe"));
 
-                var role = GetRolesFromCache().First(x => x.NormalizedName == userVM.Perfil.ToString().ToUpper());
+                var roles = GetRolesFromCache();
+                var userRole = roles.First(r => r.Name == userVM.Perfil.ToString().ToLower());
 
-                var user = CreateUser(userVM, role);
+                var user = new User() { Id = Guid.NewGuid() };
+                MaptoUser(userVM, user, userRole.Id);
 
                 var result = await _userManager.CreateAsync(user, user.PasswordHash);
 
                 if (result.Succeeded)
                     return Ok(new ResultVM<dynamic>(new { UserId = user.Id, Token = _tokenService.CreateToken(user).Result }));
 
-
                 return BadRequest(new ResultVM<string>(result.GetErrors()));
             }
             catch (Exception ex)
             {
-                return StatusCode(StatusCodes.Status500InternalServerError,
-                  new ResultVM<string>($"Erro ao tentar Registrar Usuário. Erro: {ex.Message}"));
+                return StatusCode(500, new ResultVM<string>($"Erro ao tentar Registrar Usuário. Erro: {ex.Message}"));
             }
         }
+
 
         [HttpPost("Login")]
         [AllowAnonymous]
@@ -86,7 +88,6 @@ namespace msuser.Controllers
         {
             if (!ModelState.IsValid)
                 return BadRequest(new ResultVM<string>(ModelState.GetErrors()));
-
             try
             {
                 var user = await _userManager.Users.AsNoTracking().SingleOrDefaultAsync(u => u.Email == userLogin.Email);
@@ -102,8 +103,7 @@ namespace msuser.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(StatusCodes.Status500InternalServerError,
-                    new ResultVM<string>($"Erro ao tentar realizar Login. Erro: {ex.Message}"));
+                return StatusCode(500, new ResultVM<string>($"Erro ao tentar realizar Login. Erro: {ex.Message}"));
             }
         }
 
@@ -125,72 +125,48 @@ namespace msuser.Controllers
                 var userRole = roles.First(r => r.Name == userVM.Perfil.ToString().ToLower());
 
                 _context.UserRoles.RemoveRange(user.Roles);
-
-                user.UserName = userVM.Email;
-                user.Email = userVM.Email;
-                user.PasswordHash = userVM.Senha;
-                user.FirstName = userVM.PrimeiroNome;
-                user.LastName = userVM.UltimoNome;
-                user.Profile = userVM.Perfil;
-                user.NormalizedEmail = userVM.Email.ToUpper();
-                user.NormalizedUserName = userVM.Email.ToUpper();
-                user.Roles = new List<UserRole>() { new UserRole() { RoleId = userRole.Id, UserId = user.Id } };
-
+                MaptoUser(userVM, user, userRole.Id);
 
                 if (userVM.Senha != null)
                 {
                     var token = await _userManager.GeneratePasswordResetTokenAsync(user);
                     var reset = await _userManager.ResetPasswordAsync(user, token, userVM.Senha);
-                    if(!reset.Succeeded)
+                    if (!reset.Succeeded)
                         return BadRequest(new ResultVM<string>(reset.GetErrors()));
                 };
-                var result = await _userManager.UpdateAsync(user);
-                if(result.Succeeded)
+
+                var update = await _userManager.UpdateAsync(user);
+                if (update.Succeeded)
                     return Ok(new ResultVM<dynamic>(new { UserId = user.Id, Token = _tokenService.CreateToken(user).Result }));
 
-                return BadRequest(new ResultVM<string>(result.GetErrors()));
+                return BadRequest(new ResultVM<string>(update.GetErrors()));
             }
             catch (Exception ex)
             {
-                return StatusCode(StatusCodes.Status500InternalServerError,
-                     new ResultVM<string>($"Erro ao tentar Atualizar Usuário. Erro: Erro: {ex.Message}"));
+                return StatusCode(500,  new ResultVM<string>($"Erro ao tentar Atualizar Usuário. Erro: Erro: {ex.Message}"));
             }
         }
+
         private List<Role> GetRolesFromCache()
         {
-            try
+            return _cache.GetOrCreate("RolesCache", entry =>
             {
-                var categories = _cache.GetOrCreate("RolesCache", entry =>
-                {
-                    entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1);
-                    return _context.Roles.ToList();
-                });
-
-                return categories;
-            }
-            catch
-            {
-                return null;
-            }
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1);
+                return _context.Roles.ToList();
+            });
         }
-        private static User CreateUser(UserVM userVM, Role role)
+
+        private static void MaptoUser(UserVM userVM, User? user, Guid roleId)
         {
-            var user = new User();
-            user.Id = Guid.NewGuid();
-            user.Roles = new List<UserRole>() { new UserRole() { RoleId = role.Id, UserId = user.Id } };
             user.UserName = userVM.Email;
-            user.PasswordHash = userVM.Senha;
             user.Email = userVM.Email;
+            user.PasswordHash = userVM.Senha;
             user.FirstName = userVM.PrimeiroNome;
             user.LastName = userVM.UltimoNome;
             user.Profile = userVM.Perfil;
-            return user;
-        }
-
-        private static User UpdateUser(User user, UserVM userVM, Role role)
-        {
-           
-            return user;
+            user.NormalizedEmail = userVM.Email.ToUpper();
+            user.NormalizedUserName = userVM.Email.ToUpper();
+            user.Roles = new List<UserRole>() { new UserRole() { RoleId = roleId, UserId = user.Id } };
         }
     }
 }
