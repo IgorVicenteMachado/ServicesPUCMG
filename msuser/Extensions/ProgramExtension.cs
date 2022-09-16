@@ -21,7 +21,7 @@ namespace msuser.Extensions
 
         public static void ConfigureDependencyInjection(this WebApplicationBuilder builder)
         {
-            builder.Services.AddDbContext<DataContext>(opt => opt.UseSqlServer(AppSettingsConfig.SqlConnection));
+            builder.Services.AddDbContext<DataContext>(opt => opt.UseNpgsql(AppSettingsConfig.SqlConnection));
             builder.Services.AddScoped<TokenService>();
             builder.Services.AddMemoryCache();
         }
