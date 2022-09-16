@@ -31,6 +31,8 @@ namespace msuser.Controllers
             _tokenService = tokenService;
             _cache = cache;
         }
+        [HttpGet("healthcheck")]
+        public IActionResult healthcheck() => Ok("ok");
 
         [Authorize]
         [HttpGet("GetUser")]
